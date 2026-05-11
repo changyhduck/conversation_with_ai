@@ -22,6 +22,8 @@ class ConversationApp(tk.Tk):
         self.geometry("900x620")
         self.minsize(760, 520)
 
+        self._configure_styles()
+
         self.endpoint_var = tk.StringVar(value=self.controller.config.lm_studio_endpoint)
         self.microphone_var = tk.StringVar(value=self.controller.config.microphone_name)
         self.speaker_var = tk.StringVar(value=self.controller.config.speaker_name)
@@ -131,13 +133,13 @@ class ConversationApp(tk.Tk):
         action_bar.grid(row=2, column=0, columnspan=2, sticky="ew")
         action_bar.columnconfigure(0, weight=1)
 
-        action_hint = ttk.Label(action_bar, text="Adjust settings, then save to persist the voice pipeline behavior.", foreground="#666666")
+        action_hint = ttk.Label(action_bar, text="Voice tuning settings", foreground="#666666")
         action_hint.grid(row=0, column=0, sticky="w")
 
         action_buttons = ttk.Frame(action_bar)
         action_buttons.grid(row=0, column=1, sticky="e")
-        ttk.Button(action_buttons, text="Reset Voice Tuning", command=self.reset_voice_tuning).grid(row=0, column=0, padx=(0, 8))
-        ttk.Button(action_buttons, text="Save Settings", command=self.save_settings).grid(row=0, column=1)
+        ttk.Button(action_buttons, text="Reset", command=self.reset_voice_tuning).grid(row=0, column=0, padx=(0, 8))
+        ttk.Button(action_buttons, text="Apply", command=self.apply_settings, style="Primary.TButton").grid(row=0, column=1)
 
         content_frame = ttk.Frame(self, padding=(12, 6, 12, 6))
         content_frame.grid(row=1, column=0, sticky="nsew")
@@ -297,6 +299,12 @@ class ConversationApp(tk.Tk):
         if persist:
             self.message_var.set("Settings saved.")
 
+    def apply_settings(self) -> None:
+        try:
+            self.save_settings(persist=True)
+        except ValueError as exc:
+            self._show_invalid_settings(exc)
+
     def reset_voice_tuning(self) -> None:
         self.silence_timeout_var.set(str(self.RECOMMENDED_VOICE_TUNING["silence_timeout_seconds"]))
         self.activation_threshold_var.set(str(self.RECOMMENDED_VOICE_TUNING["input_activation_rms_threshold"]))
@@ -336,3 +344,14 @@ class ConversationApp(tk.Tk):
         self._set_status(AppState.ERROR)
         self.message_var.set(str(exc))
         messagebox.showerror("Invalid Settings", str(exc))
+
+    def _configure_styles(self) -> None:
+        style = ttk.Style(self)
+        current_theme = style.theme_use()
+        style.configure("Primary.TButton", padding=(12, 4), font=("Segoe UI", 9, "bold"))
+        if current_theme in {"vista", "xpnative", "winnative", "clam", "alt", "default"}:
+            style.map(
+                "Primary.TButton",
+                foreground=[("disabled", "#9a9a9a"), ("pressed", "#ffffff"), ("active", "#ffffff")],
+                background=[("pressed", "#0f5a9d"), ("active", "#1f6fb2")],
+            )
