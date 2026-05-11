@@ -7,6 +7,12 @@ This Project is an application for listening human's voice, and then convert it 
 1. this project is implemented by Python, and it uses some libraries to achieve the functionality of this project, such as PyAudio, SpeechRecognition, gTTS, playsound, etc.
 2. this project is implemented by using the API of LM Studio to get the answer for the user's question.
 
+# Self-installation
+
+1. install Python 3.8 or above
+2. install the required libraries by running the command `pip install -r requirements.txt`
+3. run the program by running the command `python ConversationWithAI.py`
+
 # User Interface
 
 1. select a microphone
