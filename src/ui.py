@@ -8,6 +8,13 @@ from src.controller import AppController, AppState
 
 
 class ConversationApp(tk.Tk):
+    RECOMMENDED_VOICE_TUNING = {
+        "silence_timeout_seconds": 1.6,
+        "input_activation_rms_threshold": 500.0,
+        "input_chunk_seconds": 0.1,
+        "max_wait_for_speech_seconds": 12.0,
+    }
+
     def __init__(self, controller: AppController) -> None:
         super().__init__()
         self.controller = controller
@@ -35,42 +42,102 @@ class ConversationApp(tk.Tk):
 
         settings_frame = ttk.LabelFrame(self, text="Settings", padding=12)
         settings_frame.grid(row=0, column=0, sticky="nsew", padx=12, pady=(12, 6))
+        settings_frame.columnconfigure(0, weight=2)
         settings_frame.columnconfigure(1, weight=1)
-        settings_frame.columnconfigure(3, weight=1)
 
-        ttk.Label(settings_frame, text="LM Studio Endpoint").grid(row=0, column=0, sticky="w", pady=4)
-        endpoint_entry = ttk.Entry(settings_frame, textvariable=self.endpoint_var)
+        connection_frame = ttk.LabelFrame(settings_frame, text="Connection & Devices", padding=12)
+        connection_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
+        connection_frame.columnconfigure(1, weight=1)
+        connection_frame.columnconfigure(3, weight=1)
+
+        tuning_frame = ttk.LabelFrame(settings_frame, text="Voice Tuning", padding=12)
+        tuning_frame.grid(row=0, column=1, sticky="nsew")
+        tuning_frame.columnconfigure(1, weight=1)
+        tuning_frame.columnconfigure(3, weight=1)
+
+        ttk.Label(connection_frame, text="LM Studio Endpoint").grid(row=0, column=0, sticky="w", pady=4)
+        endpoint_entry = ttk.Entry(connection_frame, textvariable=self.endpoint_var)
         endpoint_entry.grid(row=0, column=1, columnspan=3, sticky="ew", pady=4)
 
-        ttk.Label(settings_frame, text="Microphone").grid(row=1, column=0, sticky="w", pady=4)
-        self.microphone_combo = ttk.Combobox(settings_frame, textvariable=self.microphone_var, state="readonly")
+        ttk.Label(connection_frame, text="Microphone").grid(row=1, column=0, sticky="w", pady=4)
+        self.microphone_combo = ttk.Combobox(connection_frame, textvariable=self.microphone_var, state="readonly")
         self.microphone_combo.grid(row=1, column=1, sticky="ew", pady=4, padx=(0, 12))
 
-        ttk.Label(settings_frame, text="Speaker").grid(row=1, column=2, sticky="w", pady=4)
-        self.speaker_combo = ttk.Combobox(settings_frame, textvariable=self.speaker_var, state="readonly")
+        ttk.Label(connection_frame, text="Speaker").grid(row=1, column=2, sticky="w", pady=4)
+        self.speaker_combo = ttk.Combobox(connection_frame, textvariable=self.speaker_var, state="readonly")
         self.speaker_combo.grid(row=1, column=3, sticky="ew", pady=4)
 
-        ttk.Label(settings_frame, text="Model").grid(row=2, column=0, sticky="w", pady=4)
-        self.model_combo = ttk.Combobox(settings_frame, textvariable=self.model_var, state="readonly")
+        ttk.Label(connection_frame, text="Model").grid(row=2, column=0, sticky="w", pady=4)
+        self.model_combo = ttk.Combobox(connection_frame, textvariable=self.model_var, state="readonly")
         self.model_combo.grid(row=2, column=1, sticky="ew", pady=4, padx=(0, 12))
 
-        button_frame = ttk.Frame(settings_frame)
+        button_frame = ttk.Frame(connection_frame)
         button_frame.grid(row=2, column=2, columnspan=2, sticky="e")
         ttk.Button(button_frame, text="Refresh Devices", command=self.refresh_devices).grid(row=0, column=0, padx=(0, 8))
         ttk.Button(button_frame, text="Refresh Models", command=self.refresh_models).grid(row=0, column=1, padx=(0, 8))
-        ttk.Button(button_frame, text="Save Settings", command=self.save_settings).grid(row=0, column=2)
 
-        ttk.Label(settings_frame, text="Silence Timeout (s)").grid(row=3, column=0, sticky="w", pady=4)
-        ttk.Entry(settings_frame, textvariable=self.silence_timeout_var).grid(row=3, column=1, sticky="ew", pady=4, padx=(0, 12))
+        ttk.Label(tuning_frame, text="Silence Timeout (s)").grid(row=0, column=0, sticky="w", pady=4)
+        tk.Spinbox(
+            tuning_frame,
+            from_=0.4,
+            to=5.0,
+            increment=0.1,
+            textvariable=self.silence_timeout_var,
+            width=10,
+        ).grid(row=0, column=1, sticky="ew", pady=4, padx=(0, 12))
 
-        ttk.Label(settings_frame, text="Activation Threshold").grid(row=3, column=2, sticky="w", pady=4)
-        ttk.Entry(settings_frame, textvariable=self.activation_threshold_var).grid(row=3, column=3, sticky="ew", pady=4)
+        ttk.Label(tuning_frame, text="Activation Threshold").grid(row=0, column=2, sticky="w", pady=4)
+        tk.Spinbox(
+            tuning_frame,
+            from_=100.0,
+            to=5000.0,
+            increment=50.0,
+            textvariable=self.activation_threshold_var,
+            width=10,
+        ).grid(row=0, column=3, sticky="ew", pady=4)
 
-        ttk.Label(settings_frame, text="Chunk Seconds").grid(row=4, column=0, sticky="w", pady=4)
-        ttk.Entry(settings_frame, textvariable=self.chunk_seconds_var).grid(row=4, column=1, sticky="ew", pady=4, padx=(0, 12))
+        ttk.Label(tuning_frame, text="Chunk Seconds").grid(row=1, column=0, sticky="w", pady=4)
+        tk.Spinbox(
+            tuning_frame,
+            from_=0.05,
+            to=0.5,
+            increment=0.05,
+            textvariable=self.chunk_seconds_var,
+            width=10,
+            format="%.2f",
+        ).grid(row=1, column=1, sticky="ew", pady=4, padx=(0, 12))
 
-        ttk.Label(settings_frame, text="Max Wait For Speech (s)").grid(row=4, column=2, sticky="w", pady=4)
-        ttk.Entry(settings_frame, textvariable=self.max_wait_var).grid(row=4, column=3, sticky="ew", pady=4)
+        ttk.Label(tuning_frame, text="Max Wait For Speech (s)").grid(row=1, column=2, sticky="w", pady=4)
+        tk.Spinbox(
+            tuning_frame,
+            from_=3.0,
+            to=30.0,
+            increment=1.0,
+            textvariable=self.max_wait_var,
+            width=10,
+        ).grid(row=1, column=3, sticky="ew", pady=4)
+        ttk.Label(
+            tuning_frame,
+            text="Higher silence timeout and max wait make recording more tolerant of pauses.",
+            foreground="#666666",
+            wraplength=320,
+            justify="left",
+        ).grid(row=3, column=0, columnspan=4, sticky="w", pady=(8, 0))
+
+        settings_separator = ttk.Separator(settings_frame, orient="horizontal")
+        settings_separator.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(12, 8))
+
+        action_bar = ttk.Frame(settings_frame)
+        action_bar.grid(row=2, column=0, columnspan=2, sticky="ew")
+        action_bar.columnconfigure(0, weight=1)
+
+        action_hint = ttk.Label(action_bar, text="Adjust settings, then save to persist the voice pipeline behavior.", foreground="#666666")
+        action_hint.grid(row=0, column=0, sticky="w")
+
+        action_buttons = ttk.Frame(action_bar)
+        action_buttons.grid(row=0, column=1, sticky="e")
+        ttk.Button(action_buttons, text="Reset Voice Tuning", command=self.reset_voice_tuning).grid(row=0, column=0, padx=(0, 8))
+        ttk.Button(action_buttons, text="Save Settings", command=self.save_settings).grid(row=0, column=1)
 
         content_frame = ttk.Frame(self, padding=(12, 6, 12, 6))
         content_frame.grid(row=1, column=0, sticky="nsew")
@@ -126,7 +193,11 @@ class ConversationApp(tk.Tk):
             self.speaker_var.set(self.controller.config.speaker_name)
 
     def refresh_models(self) -> None:
-        self.save_settings(persist=False)
+        try:
+            self.save_settings(persist=False)
+        except ValueError as exc:
+            self._show_invalid_settings(exc)
+            return
         self._set_status(AppState.REQUESTING_MODEL)
         try:
             models = self.controller.refresh_models()
@@ -143,7 +214,11 @@ class ConversationApp(tk.Tk):
         self._set_status(self.controller.state)
 
     def start_listening(self) -> None:
-        self.save_settings(persist=False)
+        try:
+            self.save_settings(persist=False)
+        except ValueError as exc:
+            self._show_invalid_settings(exc)
+            return
         self.controller.start_listening()
         self.message_var.set("Listening for speech. Speak a short sentence to send it through LM Studio.")
         self._set_status(self.controller.state)
@@ -155,7 +230,11 @@ class ConversationApp(tk.Tk):
         self._set_status(self.controller.state)
 
     def send_text(self) -> None:
-        self.save_settings(persist=False)
+        try:
+            self.save_settings(persist=False)
+        except ValueError as exc:
+            self._show_invalid_settings(exc)
+            return
         user_text = self.user_text.get("1.0", tk.END)
 
         try:
@@ -218,6 +297,13 @@ class ConversationApp(tk.Tk):
         if persist:
             self.message_var.set("Settings saved.")
 
+    def reset_voice_tuning(self) -> None:
+        self.silence_timeout_var.set(str(self.RECOMMENDED_VOICE_TUNING["silence_timeout_seconds"]))
+        self.activation_threshold_var.set(str(self.RECOMMENDED_VOICE_TUNING["input_activation_rms_threshold"]))
+        self.chunk_seconds_var.set(str(self.RECOMMENDED_VOICE_TUNING["input_chunk_seconds"]))
+        self.max_wait_var.set(str(self.RECOMMENDED_VOICE_TUNING["max_wait_for_speech_seconds"]))
+        self.message_var.set("Voice tuning reset to the recommended values.")
+
     def refresh_models_safely(self) -> None:
         try:
             self.refresh_models()
@@ -245,3 +331,8 @@ class ConversationApp(tk.Tk):
             raise ValueError(f"{label} must be greater than 0.")
 
         return parsed
+
+    def _show_invalid_settings(self, exc: Exception) -> None:
+        self._set_status(AppState.ERROR)
+        self.message_var.set(str(exc))
+        messagebox.showerror("Invalid Settings", str(exc))
