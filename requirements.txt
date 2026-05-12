@@ -1,2 +1,7 @@
-# The initial skeleton uses only the Python standard library.
-# Add runtime dependencies here as audio and speech features are implemented.
+numpy
+sounddevice
+soundfile
+SpeechRecognition
+pyttsx3
+pocketsphinx
+pytest
