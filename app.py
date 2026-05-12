@@ -16,7 +16,7 @@ def main() -> None:
         lm_studio_client=client,
         audio_input=AudioInputService(),
         audio_output=AudioOutputService(),
-        speech_to_text=SpeechToTextService(),
+        speech_to_text=SpeechToTextService(language=config.speech_language),
         text_to_speech=TextToSpeechService(),
     )
     app = ConversationApp(controller)

@@ -20,6 +20,7 @@ class AppConfig:
     sample_rate: int = 16000
     microphone_name: str = "Default microphone"
     speaker_name: str = "Default speaker"
+    speech_language: str = "zh-TW"
 
     @classmethod
     def load(cls, path: Path = DEFAULT_CONFIG_PATH) -> "AppConfig":
