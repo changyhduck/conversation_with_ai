@@ -7,6 +7,6 @@
   "input_chunk_seconds": 0.1,
   "max_wait_for_speech_seconds": 12.0,
   "sample_rate": 16000,
-  "microphone_name": "Default microphone",
-  "speaker_name": "Default speaker"
+  "microphone_name": "\u9ea5\u514b\u98a8 (Yeti Stereo Microphone)",
+  "speaker_name": "\u5587\u53ed (FiiO X3 2nd gen)"
 }
