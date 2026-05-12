@@ -28,6 +28,7 @@ class ConversationApp(tk.Tk):
         self.microphone_var = tk.StringVar(value=self.controller.config.microphone_name)
         self.speaker_var = tk.StringVar(value=self.controller.config.speaker_name)
         self.model_var = tk.StringVar(value=self.controller.config.default_model)
+        self.speech_language_var = tk.StringVar(value=self.controller.config.speech_language)
         self.silence_timeout_var = tk.StringVar(value=str(self.controller.config.silence_timeout_seconds))
         self.activation_threshold_var = tk.StringVar(value=str(self.controller.config.input_activation_rms_threshold))
         self.chunk_seconds_var = tk.StringVar(value=str(self.controller.config.input_chunk_seconds))
@@ -73,8 +74,18 @@ class ConversationApp(tk.Tk):
         self.model_combo = ttk.Combobox(connection_frame, textvariable=self.model_var, state="readonly")
         self.model_combo.grid(row=2, column=1, sticky="ew", pady=4, padx=(0, 12))
 
+        ttk.Label(connection_frame, text="Speech Language").grid(row=2, column=2, sticky="w", pady=4)
+        self.language_combo = ttk.Combobox(
+            connection_frame,
+            textvariable=self.speech_language_var,
+            values=["en-US", "zh-TW", "zh-CN", "ja-JP"],
+            state="readonly",
+        )
+        self.language_combo.grid(row=2, column=3, sticky="ew", pady=4)
+        self.language_combo.bind("<<ComboboxSelected>>", lambda e: self._on_language_changed())
+
         button_frame = ttk.Frame(connection_frame)
-        button_frame.grid(row=2, column=2, columnspan=2, sticky="e")
+        button_frame.grid(row=3, column=0, columnspan=4, sticky="e")
         ttk.Button(button_frame, text="Refresh Devices", command=self.refresh_devices).grid(row=0, column=0, padx=(0, 8))
         ttk.Button(button_frame, text="Refresh Models", command=self.refresh_models).grid(row=0, column=1, padx=(0, 8))
 
@@ -287,11 +298,13 @@ class ConversationApp(tk.Tk):
             input_activation_rms_threshold=activation_threshold,
             input_chunk_seconds=chunk_seconds,
             max_wait_for_speech_seconds=max_wait_seconds,
+            speech_language=self.speech_language_var.get(),
         )
         self.endpoint_var.set(self.controller.config.lm_studio_endpoint)
         self.microphone_var.set(self.controller.config.microphone_name)
         self.speaker_var.set(self.controller.config.speaker_name)
         self.model_var.set(self.controller.config.default_model)
+        self.speech_language_var.set(self.controller.config.speech_language)
         self.silence_timeout_var.set(str(self.controller.config.silence_timeout_seconds))
         self.activation_threshold_var.set(str(self.controller.config.input_activation_rms_threshold))
         self.chunk_seconds_var.set(str(self.controller.config.input_chunk_seconds))
@@ -303,6 +316,20 @@ class ConversationApp(tk.Tk):
         try:
             self.save_settings(persist=True)
         except ValueError as exc:
+            self._show_invalid_settings(exc)
+
+    def _on_language_changed(self) -> None:
+        try:
+            language = self.speech_language_var.get()
+            self.controller.save_settings(
+                endpoint=self.endpoint_var.get(),
+                microphone_name=self.microphone_var.get(),
+                speaker_name=self.speaker_var.get(),
+                default_model=self.model_var.get(),
+                speech_language=language,
+            )
+            self.message_var.set(f"Speech language changed to {language}.")
+        except Exception as exc:
             self._show_invalid_settings(exc)
 
     def reset_voice_tuning(self) -> None:

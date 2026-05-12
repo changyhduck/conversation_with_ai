@@ -138,6 +138,7 @@ class AppController:
         input_activation_rms_threshold: float | None = None,
         input_chunk_seconds: float | None = None,
         max_wait_for_speech_seconds: float | None = None,
+        speech_language: str | None = None,
     ) -> None:
         self.config.lm_studio_endpoint = LMStudioClient._normalize_endpoint(endpoint).rstrip("/")
         self.config.microphone_name = microphone_name.strip() or self.config.microphone_name
@@ -151,6 +152,9 @@ class AppController:
             self.config.input_chunk_seconds = input_chunk_seconds
         if max_wait_for_speech_seconds is not None:
             self.config.max_wait_for_speech_seconds = max_wait_for_speech_seconds
+        if speech_language is not None:
+            self.config.speech_language = speech_language.strip() or self.config.speech_language
+            self.speech_to_text = SpeechToTextService(language=self.config.speech_language)
         self.lm_studio_client.endpoint = LMStudioClient._normalize_endpoint(self.config.lm_studio_endpoint)
         self.config.save()
 
