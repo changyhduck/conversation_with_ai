@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import re
 import threading
 import tkinter as tk
+import webbrowser
+from tkinter import font as tkfont
 from tkinter import messagebox, ttk
 
-from src.controller import AppController, AppState
+from src.controller import AppController, AppState, ConversationResult
 
 
 class ConversationApp(tk.Tk):
@@ -14,6 +17,10 @@ class ConversationApp(tk.Tk):
         "input_chunk_seconds": 0.1,
         "max_wait_for_speech_seconds": 12.0,
     }
+    INLINE_MARKDOWN_PATTERN = re.compile(
+        r"(`[^`]+`|\*\*[^*]+\*\*|__[^_]+__|\*[^*]+\*|_[^_]+_|\[[^\]]+\]\([^)]+\))"
+    )
+    MAX_TABLE_COLUMN_WIDTH = 36
 
     def __init__(self, controller: AppController) -> None:
         super().__init__()
@@ -35,6 +42,8 @@ class ConversationApp(tk.Tk):
         self.max_wait_var = tk.StringVar(value=str(self.controller.config.max_wait_for_speech_seconds))
         self.status_var = tk.StringVar(value="idle")
         self.message_var = tk.StringVar(value="Ready. Enter an LM Studio endpoint and refresh models.")
+        self._link_tag_counter = 0
+        self._message_before_link_preview: str | None = None
 
         self._build_layout()
         self._load_initial_data()
@@ -166,6 +175,7 @@ class ConversationApp(tk.Tk):
 
         self.ai_text = tk.Text(content_frame, wrap="word", height=18, state="disabled")
         self.ai_text.grid(row=1, column=1, sticky="nsew")
+        self._configure_ai_markdown_tags()
 
         controls_frame = ttk.Frame(self, padding=(12, 0, 12, 12))
         controls_frame.grid(row=2, column=0, sticky="ew")
@@ -271,7 +281,7 @@ class ConversationApp(tk.Tk):
 
         self.after(0, self._handle_voice_turn_success, result)
 
-    def _handle_voice_turn_success(self, result) -> None:
+    def _handle_voice_turn_success(self, result: ConversationResult) -> None:
         self.user_text.delete("1.0", tk.END)
         self.user_text.insert("1.0", result.user_text)
         self._write_ai_text(result.ai_text)
@@ -350,8 +360,312 @@ class ConversationApp(tk.Tk):
     def _write_ai_text(self, text: str) -> None:
         self.ai_text.configure(state="normal")
         self.ai_text.delete("1.0", tk.END)
-        self.ai_text.insert("1.0", text)
+        self._message_before_link_preview = None
+        for tag_name in self.ai_text.tag_names():
+            if tag_name.startswith("md_link_"):
+                self.ai_text.tag_delete(tag_name)
+        self._link_tag_counter = 0
+        self._render_markdown_to_ai_text(text)
         self.ai_text.configure(state="disabled")
+
+    def _configure_ai_markdown_tags(self) -> None:
+        base_font = tkfont.nametofont("TkDefaultFont")
+        mono_font = tkfont.nametofont("TkFixedFont")
+
+        heading1_font = base_font.copy()
+        heading1_font.configure(size=max(base_font.cget("size") + 5, 14), weight="bold")
+        heading2_font = base_font.copy()
+        heading2_font.configure(size=max(base_font.cget("size") + 3, 12), weight="bold")
+        heading3_font = base_font.copy()
+        heading3_font.configure(size=max(base_font.cget("size") + 1, 11), weight="bold")
+        bold_font = base_font.copy()
+        bold_font.configure(weight="bold")
+        italic_font = base_font.copy()
+        italic_font.configure(slant="italic")
+
+        self.ai_text.tag_configure("md_p", spacing1=2, spacing3=4)
+        self.ai_text.tag_configure("md_h1", font=heading1_font, spacing1=8, spacing3=6)
+        self.ai_text.tag_configure("md_h2", font=heading2_font, spacing1=6, spacing3=4)
+        self.ai_text.tag_configure("md_h3", font=heading3_font, spacing1=4, spacing3=3)
+        self.ai_text.tag_configure("md_list", lmargin1=16, lmargin2=32, spacing3=2)
+        self.ai_text.tag_configure(
+            "md_quote",
+            lmargin1=20,
+            lmargin2=30,
+            foreground="#4a4a4a",
+            spacing1=2,
+            spacing3=4,
+        )
+        self.ai_text.tag_configure("md_bold", font=bold_font)
+        self.ai_text.tag_configure("md_italic", font=italic_font)
+        self.ai_text.tag_configure("md_code_inline", font=mono_font, background="#f3f3f3")
+        self.ai_text.tag_configure(
+            "md_code_block",
+            font=mono_font,
+            background="#f3f3f3",
+            lmargin1=16,
+            lmargin2=16,
+            spacing1=4,
+            spacing3=6,
+        )
+        self.ai_text.tag_configure(
+            "md_table",
+            font=mono_font,
+            lmargin1=8,
+            lmargin2=8,
+            spacing1=2,
+            spacing3=4,
+        )
+        self.ai_text.tag_configure("md_link", foreground="#0b57d0", underline=True)
+
+    def _render_markdown_to_ai_text(self, text: str) -> None:
+        lines = text.splitlines()
+        in_code_block = False
+        line_index = 0
+
+        while line_index < len(lines):
+            line = lines[line_index]
+            if line.strip().startswith("```"):
+                in_code_block = not in_code_block
+                line_index += 1
+                continue
+
+            if in_code_block:
+                self.ai_text.insert(tk.END, f"{line}\n", ("md_code_block",))
+                line_index += 1
+                continue
+
+            if not line.strip():
+                self.ai_text.insert(tk.END, "\n")
+                line_index += 1
+                continue
+
+            if self._is_markdown_table_start(lines, line_index):
+                line_index = self._render_markdown_table(lines, line_index)
+                continue
+
+            quote_match = re.match(r"^(\s*(?:>\s*)+)(.*)$", line)
+            if quote_match:
+                quote_prefix = quote_match.group(1)
+                quote_content = quote_match.group(2)
+                quote_level = max(1, quote_prefix.count(">"))
+                self.ai_text.insert(tk.END, "▎" * quote_level + " ", ("md_quote",))
+                self._insert_inline_markdown(quote_content, base_tags=("md_quote",))
+                self.ai_text.insert(tk.END, "\n")
+                line_index += 1
+                continue
+
+            heading_match = re.match(r"^(#{1,6})\s+(.*)$", line)
+            if heading_match:
+                level = len(heading_match.group(1))
+                content = heading_match.group(2).strip()
+                if level == 1:
+                    tag = "md_h1"
+                elif level == 2:
+                    tag = "md_h2"
+                else:
+                    tag = "md_h3"
+                self._insert_inline_markdown(content, base_tags=(tag,))
+                self.ai_text.insert(tk.END, "\n")
+                line_index += 1
+                continue
+
+            list_match = re.match(r"^(\s*)([-*]|\d+\.)\s+(.*)$", line)
+            if list_match:
+                leading_spaces = list_match.group(1).replace("\t", "    ")
+                marker = list_match.group(2)
+                item = list_match.group(3).strip()
+                indent_level = min(len(leading_spaces) // 2, 8)
+                prefix = "  " * indent_level + (f"{marker} " if marker.endswith(".") else "• ")
+                self.ai_text.insert(tk.END, prefix, ("md_list",))
+                self._insert_inline_markdown(item, base_tags=("md_list",))
+                self.ai_text.insert(tk.END, "\n")
+                line_index += 1
+                continue
+
+            self._insert_inline_markdown(line.strip(), base_tags=("md_p",))
+            self.ai_text.insert(tk.END, "\n")
+            line_index += 1
+
+    def _is_markdown_table_start(self, lines: list[str], start_index: int) -> bool:
+        if start_index + 1 >= len(lines):
+            return False
+
+        header_line = lines[start_index]
+        separator_line = lines[start_index + 1]
+        if "|" not in header_line:
+            return False
+
+        return self._is_table_separator_line(separator_line)
+
+    def _is_table_separator_line(self, line: str) -> bool:
+        normalized = line.strip()
+        if not normalized or "|" not in normalized:
+            return False
+
+        cells = self._split_table_row(normalized)
+        if not cells:
+            return False
+
+        for cell in cells:
+            if not re.fullmatch(r":?-{3,}:?", cell.strip()):
+                return False
+        return True
+
+    def _split_table_row(self, line: str) -> list[str]:
+        normalized = line.strip()
+        if normalized.startswith("|"):
+            normalized = normalized[1:]
+        if normalized.endswith("|"):
+            normalized = normalized[:-1]
+        return [part.strip() for part in normalized.split("|")]
+
+    def _render_markdown_table(self, lines: list[str], start_index: int) -> int:
+        header_cells = self._split_table_row(lines[start_index])
+        alignment_cells = self._split_table_row(lines[start_index + 1])
+
+        rows: list[list[str]] = [header_cells]
+        line_index = start_index + 2
+        while line_index < len(lines):
+            line = lines[line_index]
+            if not line.strip() or "|" not in line:
+                break
+            rows.append(self._split_table_row(line))
+            line_index += 1
+
+        column_count = max(len(header_cells), len(alignment_cells), *(len(row) for row in rows))
+        alignments: list[str] = []
+        for index in range(column_count):
+            marker = alignment_cells[index] if index < len(alignment_cells) else "---"
+            stripped = marker.strip()
+            if stripped.startswith(":") and stripped.endswith(":"):
+                alignments.append("center")
+            elif stripped.endswith(":"):
+                alignments.append("right")
+            else:
+                alignments.append("left")
+
+        normalized_rows: list[list[str]] = []
+        for row in rows:
+            normalized = row + [""] * (column_count - len(row))
+            normalized_rows.append(normalized)
+
+        widths = [0] * column_count
+        for row in normalized_rows:
+            for index, cell in enumerate(row):
+                truncated = self._truncate_table_cell(cell)
+                widths[index] = max(widths[index], len(truncated))
+
+        widths = [min(width, self.MAX_TABLE_COLUMN_WIDTH) for width in widths]
+
+        for row_index, row in enumerate(normalized_rows):
+            rendered_row = self._format_table_row(row, widths, alignments)
+            self.ai_text.insert(tk.END, f"{rendered_row}\n", ("md_table",))
+            if row_index == 0:
+                separator = "| " + " | ".join("-" * max(width, 3) for width in widths) + " |"
+                self.ai_text.insert(tk.END, f"{separator}\n", ("md_table",))
+
+        self.ai_text.insert(tk.END, "\n")
+        return line_index
+
+    def _format_table_row(self, row: list[str], widths: list[int], alignments: list[str]) -> str:
+        rendered_cells: list[str] = []
+        for index, cell in enumerate(row):
+            width = widths[index]
+            cell = self._truncate_table_cell(cell, width)
+            align = alignments[index] if index < len(alignments) else "left"
+            if align == "right":
+                rendered_cells.append(cell.rjust(width))
+            elif align == "center":
+                rendered_cells.append(cell.center(width))
+            else:
+                rendered_cells.append(cell.ljust(width))
+
+        return "| " + " | ".join(rendered_cells) + " |"
+
+    def _truncate_table_cell(self, text: str, width_limit: int | None = None) -> str:
+        limit = width_limit if width_limit is not None else self.MAX_TABLE_COLUMN_WIDTH
+        if len(text) <= limit:
+            return text
+        if limit <= 3:
+            return "." * limit
+        return text[: limit - 3] + "..."
+
+    def _insert_inline_markdown(self, text: str, base_tags: tuple[str, ...]) -> None:
+        cursor = 0
+        for match in self.INLINE_MARKDOWN_PATTERN.finditer(text):
+            if match.start() > cursor:
+                self.ai_text.insert(tk.END, text[cursor : match.start()], base_tags)
+
+            token = match.group(0)
+            tags = list(base_tags)
+
+            if token.startswith("**") and token.endswith("**"):
+                self._insert_inline_markdown(token[2:-2], base_tags=tuple(tags + ["md_bold"]))
+                cursor = match.end()
+                continue
+            elif token.startswith("__") and token.endswith("__"):
+                self._insert_inline_markdown(token[2:-2], base_tags=tuple(tags + ["md_bold"]))
+                cursor = match.end()
+                continue
+            elif token.startswith("*") and token.endswith("*"):
+                self._insert_inline_markdown(token[1:-1], base_tags=tuple(tags + ["md_italic"]))
+                cursor = match.end()
+                continue
+            elif token.startswith("_") and token.endswith("_"):
+                self._insert_inline_markdown(token[1:-1], base_tags=tuple(tags + ["md_italic"]))
+                cursor = match.end()
+                continue
+            elif token.startswith("`") and token.endswith("`"):
+                content = token[1:-1]
+                tags.append("md_code_inline")
+            elif token.startswith("[") and "](" in token and token.endswith(")"):
+                label, url_part = token[1:-1].split("](", maxsplit=1)
+                self._insert_clickable_link(label, url_part, tuple(tags + ["md_link"]))
+                cursor = match.end()
+                continue
+            else:
+                content = token
+
+            self.ai_text.insert(tk.END, content, tuple(tags))
+            cursor = match.end()
+
+        if cursor < len(text):
+            self.ai_text.insert(tk.END, text[cursor:], base_tags)
+
+    def _insert_clickable_link(self, label: str, url: str, base_tags: tuple[str, ...]) -> None:
+        start = self.ai_text.index(tk.END)
+        self.ai_text.insert(tk.END, label, base_tags)
+        end = self.ai_text.index(tk.END)
+
+        link_tag = f"md_link_{self._link_tag_counter}"
+        self._link_tag_counter += 1
+        self.ai_text.tag_add(link_tag, start, end)
+        self.ai_text.tag_configure(link_tag, foreground="#0b57d0", underline=True)
+        self.ai_text.tag_bind(link_tag, "<Button-1>", lambda _event, target=url: self._open_link(target))
+        self.ai_text.tag_bind(link_tag, "<Enter>", lambda _event, target=url: self._preview_link(target))
+        self.ai_text.tag_bind(link_tag, "<Leave>", lambda _event: self._clear_link_preview())
+
+    def _preview_link(self, url: str) -> None:
+        if self._message_before_link_preview is None:
+            self._message_before_link_preview = self.message_var.get()
+        self.ai_text.configure(cursor="hand2")
+        self.message_var.set(f"Link preview: {url}")
+
+    def _clear_link_preview(self) -> None:
+        self.ai_text.configure(cursor="xterm")
+        if self._message_before_link_preview is None:
+            return
+
+        if self.message_var.get().startswith("Link preview: "):
+            self.message_var.set(self._message_before_link_preview)
+        self._message_before_link_preview = None
+
+    def _open_link(self, url: str) -> None:
+        try:
+            webbrowser.open_new_tab(url)
+        except Exception as exc:
+            self.message_var.set(f"Failed to open link: {exc}")
 
     def _set_status(self, state: AppState) -> None:
         self.status_var.set(state.value)

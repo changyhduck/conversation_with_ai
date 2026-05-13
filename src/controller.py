@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+from typing import Protocol, Sequence
 
+from src.audio_input import CapturedAudio
 from src.audio_input import AudioInputService
 from src.audio_output import AudioOutputService
 from src.config import AppConfig
@@ -26,15 +28,67 @@ class ConversationResult:
     ai_text: str
 
 
+class _NamedDeviceProtocol(Protocol):
+    @property
+    def name(self) -> str: ...
+
+
+class _ModelInfoProtocol(Protocol):
+    @property
+    def identifier(self) -> str: ...
+
+
+class LMStudioClientProtocol(Protocol):
+    endpoint: str
+
+    def list_models(self) -> Sequence[_ModelInfoProtocol]: ...
+
+    def chat(self, user_message: str, model: str) -> str: ...
+
+
+class AudioInputProtocol(Protocol):
+    def list_devices(self) -> Sequence[_NamedDeviceProtocol]: ...
+
+    def start_listening(self) -> None: ...
+
+    def stop_listening(self) -> None: ...
+
+    def record_utterance(
+        self,
+        device_name: str,
+        sample_rate: int,
+        silence_timeout_seconds: float,
+        activation_rms_threshold: float = 500.0,
+        max_wait_for_speech_seconds: float = 10.0,
+        chunk_seconds: float = 0.2,
+    ) -> CapturedAudio: ...
+
+
+class AudioOutputProtocol(Protocol):
+    def list_devices(self) -> Sequence[_NamedDeviceProtocol]: ...
+
+    def play(self, audio_bytes: bytes, device_name: str) -> None: ...
+
+    def stop(self) -> None: ...
+
+
+class SpeechToTextProtocol(Protocol):
+    def transcribe(self, audio_bytes: bytes, sample_rate: int, sample_width: int = 2) -> str: ...
+
+
+class TextToSpeechProtocol(Protocol):
+    def synthesize(self, text: str) -> bytes: ...
+
+
 class AppController:
     def __init__(
         self,
         config: AppConfig,
-        lm_studio_client: LMStudioClient,
-        audio_input: AudioInputService,
-        audio_output: AudioOutputService,
-        speech_to_text: SpeechToTextService,
-        text_to_speech: TextToSpeechService,
+        lm_studio_client: LMStudioClientProtocol,
+        audio_input: AudioInputProtocol,
+        audio_output: AudioOutputProtocol,
+        speech_to_text: SpeechToTextProtocol,
+        text_to_speech: TextToSpeechProtocol,
     ) -> None:
         self.config = config
         self.lm_studio_client = lm_studio_client

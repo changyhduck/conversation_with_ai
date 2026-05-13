@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Optional
 
 try:
     import numpy as np
@@ -59,7 +59,7 @@ class AudioInputService:
         self._stop_requested = False
         device_index = self._resolve_input_device_index(device_name)
         chunk_frames = max(1, int(sample_rate * chunk_seconds))
-        collected_chunks: list[np.ndarray] = []
+        collected_chunks: list[Any] = []
         started = False
         silence_elapsed = 0.0
         wait_elapsed = 0.0

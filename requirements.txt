@@ -5,3 +5,4 @@ SpeechRecognition
 pyttsx3
 pocketsphinx
 pytest
+pyright[nodejs]

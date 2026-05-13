@@ -207,6 +207,7 @@ These commands are the intended future workflow after code is added:
 
 ```bash
 pip install -r requirements.txt
+pyright
 python app.py
 ```
 

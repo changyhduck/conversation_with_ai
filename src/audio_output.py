@@ -99,7 +99,9 @@ class AudioOutputService:
                 handle.write(audio_bytes)
                 handle.flush()
 
-            winsound.PlaySound(str(temp_path), winsound.SND_FILENAME | winsound.SND_SYNC)
+            filename_flag = getattr(winsound, "SND_FILENAME", 0)
+            sync_flag = getattr(winsound, "SND_SYNC", 0)
+            winsound.PlaySound(str(temp_path), filename_flag | sync_flag)
         finally:
             if temp_path is not None and temp_path.exists():
                 os.remove(temp_path)
